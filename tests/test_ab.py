@@ -76,3 +76,21 @@ def test_missing_column_raises(tmp_path):
     p.write_text("userid,version\n1,gate_30\n")
     with pytest.raises(ValueError, match="missing columns"):
         ab.load(p)
+
+
+def test_logistic_odds_ratio_equals_cross_product_ratio():
+    df = synth(n=40000, p7c=0.19, p7t=0.17, seed=3)
+    g = df.groupby("version")["retention_7"].agg(["sum", "count"])
+    a, b = g.loc[ab.TREATMENT, "sum"], g.loc[ab.TREATMENT, "count"] - g.loc[ab.TREATMENT, "sum"]
+    c, d = g.loc[ab.CONTROL, "sum"], g.loc[ab.CONTROL, "count"] - g.loc[ab.CONTROL, "sum"]
+    expected = (a / b) / (c / d)
+    got = ab.regression_models(df)["retention_7"]
+    assert got["odds_ratio"] == pytest.approx(expected, rel=1e-6)
+    assert got["or_low"] < got["odds_ratio"] < got["or_high"]
+
+
+def test_regression_pvalue_agrees_with_ztest_on_planted_effect():
+    df = synth(n=90_000, p7c=0.19, p7t=0.175, seed=5)
+    assert ab.regression_models(df)["retention_7"]["p"] < 0.05
+    null = ab.regression_models(synth(n=90_000, seed=9))
+    assert null["retention_7"]["p"] > 0.01 and null["log_rounds"]["p"] > 0.01

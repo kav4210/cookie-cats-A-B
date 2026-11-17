@@ -23,6 +23,7 @@ import pandas as pd
 from scipy import stats
 from statsmodels.stats.power import NormalIndPower
 from statsmodels.stats.proportion import confint_proportions_2indep, proportion_effectsize
+import statsmodels.api as sm
 from statsmodels.stats.multitest import multipletests
 
 CONTROL, TREATMENT = "gate_30", "gate_40"
@@ -94,6 +95,29 @@ def bootstrap_mean_diff(a: np.ndarray, b: np.ndarray, reps: int = 5000) -> dict:
     return {"diff": b.mean() - a.mean(), "ci_low": np.percentile(diffs, 2.5), "ci_high": np.percentile(diffs, 97.5)}
 
 
+
+# ---------- regression ----------
+def regression_models(df: pd.DataFrame) -> dict:
+    """Logistic regression for each retention outcome and OLS on log(1 + rounds), each on the
+    treatment indicator alone. The file has no pre-experiment covariates, and game rounds are
+    measured after assignment, so adjusting for rounds would bias the treatment effect
+    (post-treatment adjustment). With one binary predictor the logistic odds ratio equals the
+    2x2 cross-product ratio, so these models double as a consistency check on the z-tests."""
+    X = sm.add_constant((df["version"] == TREATMENT).astype(float).rename("gate_40"))
+    out = {}
+    for metric in ("retention_1", "retention_7"):
+        fit = sm.Logit(df[metric].astype(float), X).fit(disp=0)
+        lo, hi = np.exp(fit.conf_int().loc["gate_40"])
+        out[metric] = {"odds_ratio": float(np.exp(fit.params["gate_40"])), "or_low": float(lo),
+                       "or_high": float(hi), "p": float(fit.pvalues["gate_40"])}
+    y = np.log1p(df["sum_gamerounds"].astype(float))
+    ols = sm.OLS(y, X).fit(cov_type="HC3")
+    lo, hi = ols.conf_int().loc["gate_40"]
+    out["log_rounds"] = {"pct_change": float(np.expm1(ols.params["gate_40"]) * 100),
+                         "low": float(np.expm1(lo) * 100), "high": float(np.expm1(hi) * 100),
+                         "p": float(ols.pvalues["gate_40"])}
+    return out
+
 # ---------- Bayesian ----------
 def bayesian_beta_binomial(x_c: int, n_c: int, x_t: int, n_t: int, draws: int = 200_000) -> dict:
     """Beta(1,1) priors. Returns P(treatment > control), expected loss of shipping treatment
@@ -127,6 +151,7 @@ def analyze(df: pd.DataFrame) -> dict:
     adj = multipletests(raw, alpha=ALPHA, method="holm")[1]
     res["retention_1"]["freq"]["p_holm"], res["retention_7"]["freq"]["p_holm"] = adj
 
+    res["regression"] = regression_models(df)
     ca, ta = c["sum_gamerounds"].to_numpy(float), t["sum_gamerounds"].to_numpy(float)
     u, p_u = stats.mannwhitneyu(ca, ta, alternative="two-sided")
     res["rounds"] = {
@@ -187,6 +212,7 @@ def report(res: dict) -> str:
     q, s = res["quality"], res["srm"]
     r1, r7, rr = res["retention_1"], res["retention_7"], res["rounds"]
     f1, f7, b7 = r1["freq"], r7["freq"], r7["bayes"]
+    g1, g7, lr = res["regression"]["retention_1"], res["regression"]["retention_7"], res["regression"]["log_rounds"]
     return f"""# Cookie Cats gate experiment: results
 
 **Recommendation:** {recommendation(res)}
@@ -212,6 +238,13 @@ Players were split between a control with the first gate at level 30 (`gate_30`)
 
 ## Game rounds (guardrail)
 Median rounds: {rr['median_control']:.0f} vs {rr['median_treatment']:.0f}. Mean: {rr['mean_control']:.1f} vs {rr['mean_treatment']:.1f}. Mann-Whitney p = {rr['mannwhitney_p']:.3f}. Bootstrap 95% CI on the mean difference: {rr['bootstrap_mean_diff']['ci_low']:+.2f} to {rr['bootstrap_mean_diff']['ci_high']:+.2f}. Mean difference with the top 0.1% of players removed: {rr['mean_diff_excluding_top_0.1pct']:+.2f}.
+
+## Regression
+Logistic regression of each retention outcome on the treatment indicator (odds ratio for gate_40 vs gate_30), and OLS with robust (HC3) errors on log(1 + game rounds).
+- 1-day retention: odds ratio {g1['odds_ratio']:.3f} (95% CI {g1['or_low']:.3f} to {g1['or_high']:.3f}), p = {g1['p']:.3f}
+- 7-day retention: odds ratio {g7['odds_ratio']:.3f} (95% CI {g7['or_low']:.3f} to {g7['or_high']:.3f}), p = {g7['p']:.4f}
+- Game rounds: {lr['pct_change']:+.1f}% (95% CI {lr['low']:+.1f}% to {lr['high']:+.1f}%), p = {lr['p']:.3f}
+- No covariates are added on purpose. The data has no pre-experiment player attributes, and adjusting for game rounds would be post-treatment adjustment and would bias the effect. With one binary predictor the odds ratio equals the 2x2 table's cross-product ratio, so the regression agrees with the z-tests by construction.
 
 ## Power
 With {min(s['n_control'], s['n_treatment']):,} players per group, 80% power and 5% significance, this test could reliably detect a 7-day retention change of about **{r7['power']['mde_abs']*100:.2f} pp**. Detecting a 1 pp change needs about **{r7['power']['n_for_1pp_per_group']:,}** players per group. A non-significant result means the true effect is probably smaller than that, not that it is zero.

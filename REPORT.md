@@ -24,6 +24,13 @@ Players were split between a control with the first gate at level 30 (`gate_30`)
 ## Game rounds (guardrail)
 Median rounds: 17 vs 16. Mean: 52.5 vs 51.3. Mann-Whitney p = 0.050. Bootstrap 95% CI on the mean difference: -4.14 to +0.97. Mean difference with the top 0.1% of players removed: -0.28.
 
+## Regression
+Logistic regression of each retention outcome on the treatment indicator (odds ratio for gate_40 vs gate_30), and OLS with robust (HC3) errors on log(1 + game rounds).
+- 1-day retention: odds ratio 0.976 (95% CI 0.951 to 1.002), p = 0.074
+- 7-day retention: odds ratio 0.947 (95% CI 0.916 to 0.980), p = 0.0016
+- Game rounds: -1.8% (95% CI -3.7% to +0.1%), p = 0.070
+- No covariates are added on purpose. The data has no pre-experiment player attributes, and adjusting for game rounds would be post-treatment adjustment and would bias the effect. With one binary predictor the odds ratio equals the 2x2 table's cross-product ratio, so the regression agrees with the z-tests by construction.
+
 ## Power
 With 44,700 players per group, 80% power and 5% significance, this test could reliably detect a 7-day retention change of about **0.74 pp**. Detecting a 1 pp change needs about **24,658** players per group. A non-significant result means the true effect is probably smaller than that, not that it is zero.
 

@@ -11,7 +11,7 @@ The public Cookie Cats dataset (about 90,000 players, columns `userid, version, 
 ```bash
 pip install -r requirements.txt
 python ab_analysis.py data/cookie_cats.csv   # writes REPORT.md and two PNG charts
-pytest                                       # 9 tests
+pytest                                       # 11 tests
 ```
 
 ## What it does
@@ -20,8 +20,9 @@ pytest                                       # 9 tests
 3. **Retention tests:** two-proportion z-test with a 95% confidence interval on the difference, Holm correction across the two primary metrics.
 4. **Bayesian view:** Beta-Binomial posterior giving the probability the treatment is better, a credible interval, and the expected loss of shipping it.
 5. **Guardrail (game rounds):** medians, Mann-Whitney test, and a bootstrap CI, because rounds are heavy-tailed and a t-test on means would be misleading.
-6. **Power analysis:** the smallest retention change this test could reliably detect, and the sample size needed for a 1 percentage point change.
-7. **Recommendation:** a decision rule that refuses to call a winner if the sample ratio check fails.
+6. **Regression:** logistic regression (odds ratios with CIs) for both retention metrics and robust OLS on log game rounds, deliberately with no covariates, because the data has no pre-experiment attributes and game rounds are post-treatment.
+7. **Power analysis:** the smallest retention change this test could reliably detect, and the sample size needed for a 1 percentage point change.
+8. **Recommendation:** a decision rule that refuses to call a winner if the sample ratio check fails.
 
 ## Tests
 The tests check the z-test against statsmodels, the power calculation against the textbook formula, that a planted effect is detected, and that a null experiment is not called significant.
