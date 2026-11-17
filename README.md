@@ -23,7 +23,7 @@ pytest                                       # 11 tests
 6. **Regression:** logistic regression (odds ratios with CIs) for both retention metrics and robust OLS on log game rounds, deliberately with no covariates, because the data has no pre-experiment attributes and game rounds are post-treatment.
 7. **Power analysis:** the smallest retention change this test could reliably detect, and the sample size needed for a 1 percentage point change.
 8. **A/A simulation:** 2,000 random re-splits of the real players into fake arms to confirm the test's false positive rate is about 5%, so the pipeline is calibrated.
-8. **Recommendation:** a decision rule that refuses to call a winner if the sample ratio check fails.
+9. **Recommendation:** a decision rule that refuses to call a winner if the sample ratio check fails.
 
 ## Tests
 The tests check the z-test against statsmodels, the power calculation against the textbook formula, that a planted effect is detected, and that a null experiment is not called significant.
