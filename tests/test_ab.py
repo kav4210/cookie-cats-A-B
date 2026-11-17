@@ -94,3 +94,9 @@ def test_regression_pvalue_agrees_with_ztest_on_planted_effect():
     assert ab.regression_models(df)["retention_7"]["p"] < 0.05
     null = ab.regression_models(synth(n=90_000, seed=9))
     assert null["retention_7"]["p"] > 0.01 and null["log_rounds"]["p"] > 0.01
+
+
+def test_aa_simulation_is_calibrated():
+    r = ab.aa_simulation(synth(), reps=1000, seed=3)
+    assert r["within_binomial_band"]
+    assert r["ks_p_uniform"] > 0.01

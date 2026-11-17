@@ -31,6 +31,9 @@ Logistic regression of each retention outcome on the treatment indicator (odds r
 - Game rounds: -1.8% (95% CI -3.7% to +0.1%), p = 0.070
 - No covariates are added on purpose. The data has no pre-experiment player attributes, and adjusting for game rounds would be post-treatment adjustment and would bias the effect. With one binary predictor the odds ratio equals the 2x2 table's cross-product ratio, so the regression agrees with the z-tests by construction.
 
+## A/A simulation (pipeline check)
+Before trusting any A/B result, the test pipeline should not find "effects" where none exist. Players were randomly shuffled into two fake arms with the real group sizes, and 7-day retention was tested 2,000 times. False positive rate: **4.7%** (target 5.0%; inside the sampling band). Uniformity of the p-values (Kolmogorov-Smirnov) p = 0.83. The test is well calibrated, so the real gate_30 vs gate_40 result is not an artifact of the method.
+
 ## Power
 With 44,700 players per group, 80% power and 5% significance, this test could reliably detect a 7-day retention change of about **0.74 pp**. Detecting a 1 pp change needs about **24,658** players per group. A non-significant result means the true effect is probably smaller than that, not that it is zero.
 

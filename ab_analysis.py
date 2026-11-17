@@ -152,6 +152,7 @@ def analyze(df: pd.DataFrame) -> dict:
     res["retention_1"]["freq"]["p_holm"], res["retention_7"]["freq"]["p_holm"] = adj
 
     res["regression"] = regression_models(df)
+    res["aa"] = aa_simulation(df)
     ca, ta = c["sum_gamerounds"].to_numpy(float), t["sum_gamerounds"].to_numpy(float)
     u, p_u = stats.mannwhitneyu(ca, ta, alternative="two-sided")
     res["rounds"] = {
@@ -165,6 +166,28 @@ def analyze(df: pd.DataFrame) -> dict:
         ),
     }
     return res
+
+
+def aa_simulation(df: pd.DataFrame, reps: int = 2000, seed: int = 0) -> dict:
+    """A/A check: shuffle players into two fake arms of the real group sizes and test 7-day
+    retention. A calibrated pipeline rejects about 5% of the time and gives uniform p-values."""
+    rng = np.random.default_rng(seed)
+    y = df["retention_7"].to_numpy(bool)
+    n, n_c = len(y), int((df.version == CONTROL).sum())
+    n_t = n - n_c
+    pvals = np.empty(reps)
+    for i in range(reps):
+        idx = rng.permutation(n)
+        xc, xt = y[idx[:n_c]].sum(), y[idx[n_c:]].sum()
+        pooled = (xc + xt) / n
+        se = math.sqrt(pooled * (1 - pooled) * (1 / n_c + 1 / n_t))
+        z = (xt / n_t - xc / n_c) / se
+        pvals[i] = 2 * stats.norm.sf(abs(z))
+    fp = float((pvals < ALPHA).mean())
+    half = 1.96 * math.sqrt(ALPHA * (1 - ALPHA) / reps)
+    return {"reps": reps, "false_positive_rate": fp, "expected": ALPHA,
+            "within_binomial_band": bool(abs(fp - ALPHA) <= half),
+            "ks_p_uniform": float(stats.kstest(pvals, "uniform").pvalue)}
 
 
 def recommendation(res: dict) -> str:
@@ -212,6 +235,7 @@ def report(res: dict) -> str:
     q, s = res["quality"], res["srm"]
     r1, r7, rr = res["retention_1"], res["retention_7"], res["rounds"]
     f1, f7, b7 = r1["freq"], r7["freq"], r7["bayes"]
+    aa = res["aa"]
     g1, g7, lr = res["regression"]["retention_1"], res["regression"]["retention_7"], res["regression"]["log_rounds"]
     return f"""# Cookie Cats gate experiment: results
 
@@ -245,6 +269,9 @@ Logistic regression of each retention outcome on the treatment indicator (odds r
 - 7-day retention: odds ratio {g7['odds_ratio']:.3f} (95% CI {g7['or_low']:.3f} to {g7['or_high']:.3f}), p = {g7['p']:.4f}
 - Game rounds: {lr['pct_change']:+.1f}% (95% CI {lr['low']:+.1f}% to {lr['high']:+.1f}%), p = {lr['p']:.3f}
 - No covariates are added on purpose. The data has no pre-experiment player attributes, and adjusting for game rounds would be post-treatment adjustment and would bias the effect. With one binary predictor the odds ratio equals the 2x2 table's cross-product ratio, so the regression agrees with the z-tests by construction.
+
+## A/A simulation (pipeline check)
+Before trusting any A/B result, the test pipeline should not find "effects" where none exist. Players were randomly shuffled into two fake arms with the real group sizes, and 7-day retention was tested {aa['reps']:,} times. False positive rate: **{aa['false_positive_rate']:.1%}** (target 5.0%; {'inside' if aa['within_binomial_band'] else 'OUTSIDE'} the sampling band). Uniformity of the p-values (Kolmogorov-Smirnov) p = {aa['ks_p_uniform']:.2f}. {'The test is well calibrated, so the real gate_30 vs gate_40 result is not an artifact of the method.' if aa['within_binomial_band'] else 'The test is miscalibrated; do not trust the results above until this is understood.'}
 
 ## Power
 With {min(s['n_control'], s['n_treatment']):,} players per group, 80% power and 5% significance, this test could reliably detect a 7-day retention change of about **{r7['power']['mde_abs']*100:.2f} pp**. Detecting a 1 pp change needs about **{r7['power']['n_for_1pp_per_group']:,}** players per group. A non-significant result means the true effect is probably smaller than that, not that it is zero.
